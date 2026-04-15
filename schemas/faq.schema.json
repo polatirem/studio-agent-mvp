@@ -1,0 +1,19 @@
+{
+  "artifactType": "faq",
+  "schemaVersion": "mvp-0.7",
+  "requiredContentFields": [
+    "title",
+    "status",
+    "itemCount",
+    "items"
+  ],
+  "qualityRules": [
+    "Must include at least 6 FAQ items.",
+    "Each item must include id, question, answer, sourceReference, and difficulty.",
+    "Questions must be user-facing and end with a question mark.",
+    "Answers must be concise, synthesized, and grounded in the fact layer.",
+    "sourceReference must match a real knowledge-base section.",
+    "Questions must not repeat.",
+    "Must include at least one analytical question."
+  ]
+}

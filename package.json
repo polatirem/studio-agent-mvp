@@ -1,0 +1,19 @@
+{
+  "name": "studio-agent",
+  "version": "1.0.0",
+  "description": "Minimal studio-agent MVP that compiles a knowledge base into structured artifacts.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "build": "node src/index.js"
+  },
+  "keywords": [
+    "studio-agent",
+    "artifacts",
+    "knowledge-base"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "description": ""
+}

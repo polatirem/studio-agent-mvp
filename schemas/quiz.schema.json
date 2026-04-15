@@ -1,0 +1,20 @@
+{
+  "artifactType": "quiz",
+  "schemaVersion": "mvp-0.7",
+  "requiredContentFields": [
+    "title",
+    "status",
+    "questionCount",
+    "questions"
+  ],
+  "qualityRules": [
+    "Must include at least 5 questions.",
+    "Each question must include id, type, question, answer, and sourceReference.",
+    "Must include provenance metadata.",
+    "Questions must be real quiz questions, not source-fragment wrappers.",
+    "Answers must be synthesized and must not be raw source dumps.",
+    "Question set should mix fact recall, interpretation, comparison, and method selection.",
+    "Each question may include difficulty: easy, medium, or hard.",
+    "sourceReference must match a real knowledge-base section."
+  ]
+}

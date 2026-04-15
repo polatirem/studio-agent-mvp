@@ -1,0 +1,28 @@
+{
+  "artifactType": "executive-summary",
+  "schemaVersion": "mvp-0.7",
+  "requiredContentFields": [
+    "title",
+    "audience",
+    "status",
+    "overview",
+    "keyFindings",
+    "statisticalEvidence",
+    "implications",
+    "recommendedActions",
+    "sourceReferences"
+  ],
+  "qualityRules": [
+    "Must include provenance metadata.",
+    "Must not invent claims when the knowledge base is empty.",
+    "Must include synthesized findings rather than raw source chunks.",
+    "Overview and key findings must be complete sentences.",
+    "Must mention sample size, dp1, cov1, significance, and effect size when available.",
+    "Must include non-empty sourceReferences backed by knowledge-base sections.",
+    "Must avoid repeated-token wording and transliteration artifacts.",
+    "Each keyFinding must include claim and sourceSection.",
+    "Each keyFinding should represent one distinct finding.",
+    "Key findings must avoid multi-metric bundled claims.",
+    "May include confidenceNote when confidence interval evidence is available."
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "artifactType": "worksheet",
+  "schemaVersion": "mvp-0.7",
+  "requiredContentFields": [
+    "title",
+    "audience",
+    "status",
+    "learningGoals",
+    "guidedQuestions",
+    "answerKey",
+    "sourceReferences"
+  ],
+  "qualityRules": [
+    "Must include at least 5 guidedQuestions.",
+    "Must include at least 5 answerKey entries.",
+    "Each guided question must include id, prompt, skillType, and sourceReference.",
+    "Must include interpretation, method reasoning, and evidence-reading tasks.",
+    "Must not duplicate quiz wording exactly.",
+    "sourceReferences must be non-empty and valid."
+  ]
+}

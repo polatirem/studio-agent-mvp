@@ -1,0 +1,25 @@
+{
+  "artifactType": "insight-brief",
+  "schemaVersion": "mvp-0.7",
+  "requiredContentFields": [
+    "title",
+    "audience",
+    "status",
+    "coreInsight",
+    "supportingInsights",
+    "risksOrLimitations",
+    "recommendedDecisions",
+    "sourceMappings"
+  ],
+  "qualityRules": [
+    "Must be decision-focused rather than a general summary.",
+    "Must include at least 3 supportingInsights.",
+    "Must include at least 2 risksOrLimitations.",
+    "Each supporting insight must include claim, reasoning, sourceSection, and optional evidence.",
+    "Supporting insight reasoning must explain why the claim matters.",
+    "Evidence arrays must contain clean fact-layer evidence when present.",
+    "Each supporting insight must have a claim-level source mapping.",
+    "Each sourceMapping must include claim and sourceSection.",
+    "sourceSection must match a real knowledge-base section."
+  ]
+}

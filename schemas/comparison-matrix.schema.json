@@ -1,0 +1,16 @@
+{
+  "artifactType": "comparison-matrix",
+  "schemaVersion": "mvp-0.7",
+  "requiredContentFields": [
+    "title",
+    "status",
+    "comparisons"
+  ],
+  "qualityRules": [
+    "Must include at least 1 comparison item.",
+    "Each comparison item must include label, comparisonType, variables, keyMetrics, interpretation, and sourceReference.",
+    "keyMetrics must not be empty.",
+    "sourceReference must match a real knowledge-base section.",
+    "Must be generated from generic comparisons and evidence."
+  ]
+}
