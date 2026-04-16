@@ -1,5 +1,10 @@
 # Studio Agent MVP
 
+## Demo
+
+Uygulamayı çalıştırdıktan sonra:
+
+outputs/report.html dosyasını açarak arayüzü görüntüleyebilirsiniz.
 ## What is this project?
 
 This is a small Node.js studio-agent that turns `knowledge-base.md` into reusable learning and decision artifacts.
