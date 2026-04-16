@@ -81,6 +81,26 @@ On Windows PowerShell:
 $env:NO_OPEN="1"; npm start
 ```
 
+## Interactive Studio
+
+Run the local studio UI with:
+
+```bash
+npm run studio
+```
+
+Then open:
+
+```bash
+http://localhost:4317
+```
+
+The studio lets you paste a knowledge base, choose an audience, choose an artifact type, and generate a grounded preview. It uses the same fact extraction and artifact pipeline as the CLI compiler. The browser UI does not generate directly from raw text; it calls the local Node pipeline so outputs stay source-grounded and traceable.
+
+Studio artifact options include executive summary, insight brief, FAQ, quiz, worksheet, comparison matrix, slide deck, summary notes, teaching outline, and decision card.
+
+The studio also shows confidence indicators on supported claims. Slide deck output includes a presentation mode with next/previous controls, keyboard navigation, and a dark/light slide view.
+
 ## Example output explanation
 
 For the current statistical knowledge base, the report focuses on the Time 1 vs Time 2 comparison. It highlights the median decrease, statistical significance, effect size, confidence interval, and recommended ways to communicate the result.

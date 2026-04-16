@@ -1,2 +1,4 @@
 node_modules/
 outputs/*.json
+*.log
+.studio-smoke-test.js

@@ -1,1 +1,1 @@
-require("./compiler");
+require("./compiler").main();

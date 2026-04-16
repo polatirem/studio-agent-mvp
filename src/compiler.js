@@ -181,33 +181,61 @@ function formatPValue(value) {
   return value.startsWith("<") ? `p ${value.replace("<", "< ")}` : `p = ${value}`;
 }
 
+function normalizeConfidence(confidence) {
+  if (typeof confidence !== "number" || Number.isNaN(confidence)) return null;
+  if (confidence > 1 && confidence <= 100) return Number((confidence / 100).toFixed(2));
+  if (confidence < 0 || confidence > 1) return null;
+  return confidence;
+}
+
+function confidenceLabel(confidence) {
+  const normalized = normalizeConfidence(confidence);
+  if (normalized === null) return "not-scored";
+  if (normalized >= 0.85) return "high";
+  if (normalized >= 0.6) return "medium";
+  return "low";
+}
+
+function supportedFact(value, sourceSection, confidence, extra = {}) {
+  const normalizedConfidence = normalizeConfidence(confidence);
+  return {
+    ...extra,
+    value,
+    sourceSection,
+    confidence: normalizedConfidence,
+    supported: Boolean(value) && normalizedConfidence !== null && normalizedConfidence >= 0.3,
+  };
+}
+
+function explicitNumberConfidence(value) {
+  return /-?\d+(?:\.\d+)?/.test(String(value)) ? 0.95 : 0.7;
+}
+
 function buildEvidence({ time1Median, time2Median, decreasePercent, pairedEffectSize, confidenceInterval, pValue, effectSizeFindings, sourceSections }) {
   const dependentSection = firstAvailableSection(sourceSections, ["Dependent Data Analysis", "Descriptive Statistics", "Unknown Section"]);
   const independentSection = firstAvailableSection(sourceSections, ["Independent One-Group Analysis", "Descriptive Statistics", "Unknown Section"]);
   const evidence = [];
 
   if (time1Median !== null && time2Median !== null && decreasePercent !== null) {
-    evidence.push({
+    evidence.push(supportedFact(`Median decreased from ${time1Median} to ${time2Median}, a ${decreasePercent}% reduction.`, dependentSection, 0.96, {
       type: "statistic",
       label: "median change",
-      value: `Median decreased from ${time1Median} to ${time2Median}, a ${decreasePercent}% reduction.`,
-      sourceSection: dependentSection,
-    });
+    }));
   }
   if (pValue) {
-    evidence.push({ type: "significance", label: "p-value", value: formatPValue(pValue), sourceSection: dependentSection });
+    evidence.push(supportedFact(formatPValue(pValue), dependentSection, 0.98, { type: "significance", label: "p-value" }));
   }
   if (pairedEffectSize !== null) {
-    evidence.push({ type: "effect-size", label: "paired effect size", value: `r = ${pairedEffectSize}`, sourceSection: dependentSection });
+    evidence.push(supportedFact(`r = ${pairedEffectSize}`, dependentSection, 0.96, { type: "effect-size", label: "paired effect size" }));
   }
   if (confidenceInterval) {
-    evidence.push({ type: "confidence-interval", label: "effect-size confidence interval", value: confidenceInterval, sourceSection: dependentSection });
+    evidence.push(supportedFact(confidenceInterval, dependentSection, explicitNumberConfidence(confidenceInterval), { type: "confidence-interval", label: "effect-size confidence interval" }));
   }
   for (const finding of effectSizeFindings.filter((item) => item.context === "independent")) {
-    evidence.push({ type: "effect-size", label: "independent effect size", value: finding.value, sourceSection: finding.sourceSection || independentSection });
+    evidence.push(supportedFact(finding.value, finding.sourceSection || independentSection, finding.confidence || explicitNumberConfidence(finding.value), { type: "effect-size", label: "independent effect size" }));
   }
 
-  return evidence;
+  return evidence.filter((item) => item.supported);
 }
 
 function buildComparisons({ text, variables, sourceSections, time1Median, time2Median, decreasePercent, pValue, pairedEffectSize, confidenceInterval, effectSizeFindings, independentEffectVariable }) {
@@ -217,11 +245,13 @@ function buildComparisons({ text, variables, sourceSections, time1Median, time2M
   const independentSection = firstAvailableSection(sourceSections, ["Independent One-Group Analysis", "Descriptive Statistics", "Unknown Section"]);
   const explicitPair = text.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s+vs\s+([a-zA-Z_][a-zA-Z0-9_]*)/i);
   const timeLabel = /Time\s*1|Zaman\s*1/i.test(text) && /Time\s*2|Zaman\s*2/i.test(text) ? "Time 1 vs Time 2" : null;
+  const beforeAfterLabel = /before/i.test(text) && /after/i.test(text) ? "Before vs After" : null;
 
   if (time1Median !== null || time2Median !== null || pValue || pairedEffectSize !== null || explicitPair || timeLabel) {
     comparisons.push({
       type: "paired",
-      label: timeLabel || (explicitPair ? `${explicitPair[1]} vs ${explicitPair[2]}` : "Paired comparison"),
+      label: timeLabel || beforeAfterLabel || (explicitPair ? `${explicitPair[1]} vs ${explicitPair[2]}` : "Paired comparison"),
+      confidence: timeLabel || explicitPair ? 0.75 : 0.45,
       variables: explicitPair ? [explicitPair[1], explicitPair[2]].filter(Boolean) : variableNames.slice(0, 2),
       sourceSection: dependentSection,
       metrics: {
@@ -257,7 +287,9 @@ function extractFactLayer(source) {
   const text = source.normalized;
   const rows = parseMarkdownRows(text);
   const sourceSections = extractSourceSections(text);
-  const sampleSize = findNumber(text, [/\bn\s*=\s*(\d+)/i, /\|\s*\w+\s*\|\s*(\d+)\s*\|/]);
+  const sampleSize = findNumber(text, [/\bn\s*=\s*(\d+)/i, /sample size\s*[:=]\s*(\d+)/i, /örneklem\s*[:=-]?\s*\D{0,20}(\d+)/i, /\|\s*\w+\s*\|\s*(\d+)\s*\|/i]);
+  const generalSection = firstAvailableSection(sourceSections, ["General Information", "Descriptive Statistics", "Unknown Section"]);
+  const sampleSizeFact = sampleSize ? supportedFact(`n = ${sampleSize}`, generalSection, 0.95, { type: "statistic", label: "sample size" }) : null;
   const variables = extractVariables(rows);
   const measurements = inferMeasurements(variables);
   const normality = extractNormality(text, Object.keys(variables));
@@ -265,14 +297,15 @@ function extractFactLayer(source) {
 
   const time1Median = findNumber(text, [/Ortanca\s*\|\s*\*\*([0-9.]+)\*\*\s*\|\s*\*\*[0-9.]+\*\*/i]);
   const time2Median = findNumber(text, [/Ortanca\s*\|\s*\*\*[0-9.]+\*\*\s*\|\s*\*\*([0-9.]+)\*\*/i]);
-  const decreasePercent = findNumber(text, [/%\s*([0-9.]+)\s*azalm/i, /([0-9.]+)\s*azalma/i]);
+  const decreasePercent = findNumber(text, [/%\s*([0-9.]+)\s*(?:azalm|decreas|reduc|düş|dus)/i, /([0-9.]+)\s*%\s*(?:azalm|decreas|reduc|düş|dus)/i, /([0-9.]+)\s*azalma/i]);
   const pairedEffectSize = findNumber(text, [/Etki B[^\n|]*\(r\)\s*\|\s*\*\*(-?[0-9.]+)\*\*/i, /r\s*=\s*\*\*(-?[0-9.]+)\*\*/i, /r\s*=\s*(-?[0-9.]+)/i]);
   const pairedCorrelation = findNumber(text, [/Korelasyon\s*\(r\)\s*\|\s*([0-9.]+)/i]);
   const independentEffectSize = findNumber(text, [/\|\s*[a-zA-Z_][a-zA-Z0-9_]*\s*\|\s*\*\*([0-9.]+)\*\*\s*\|[^\n]*etki/i, /Cohen's d\s*=\s*\*\*([0-9.]+)\*\*/i, /T-test[\s\S]{0,60}<0\.001[\s\S]{0,30}\|\s*([0-9.]+)\s*\|/i]);
   const independentEffectVariableMatch = text.match(/\|\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\|\s*\*\*[0-9.]+\*\*\s*\|[^\n]*etki/i);
   const independentEffectVariable = independentEffectVariableMatch?.[1] || Object.keys(variables).find((name) => new RegExp(`${name}[\\s\\S]{0,180}T-test[\\s\\S]{0,80}<0\\.001`, "i").test(text)) || null;
   const confidenceInterval = findTextMatch(text, [/%95 GA \(EB\)\s*\|\s*(\[[^\]]+\])/i, /G[^\n]*aral[^\n]*(\[-?[0-9.]+\s*:\s*-?[0-9.]+\])/i]);
-  const pairedPValue = /p[^\n|]*\|\s*\*\*<\s*0\.001\*\*/i.test(text) || /p\s*<\s*0\.001/i.test(text) ? "<0.001" : null;
+  const pValueMatch = text.match(/p\s*(<|=|>)\s*(0?\.\d+)/i);
+  const pairedPValue = /p[^\n|]*\|\s*\*\*<\s*0\.001\*\*/i.test(text) ? "<0.001" : pValueMatch ? `${pValueMatch[1]}${pValueMatch[2]}` : /statistically significant|anlaml[ıi]\s+fark/i.test(text) ? "reported significant" : null;
 
   const independentAnalysis = [];
   const effectSizeFindings = [
@@ -280,11 +313,11 @@ function extractFactLayer(source) {
       ? { context: "paired", variable: null, label: "paired effect size", value: `r = ${pairedEffectSize}`, sourceSection: firstAvailableSection(sourceSections, ["Dependent Data Analysis", "Unknown Section"]) }
       : null,
     independentEffectVariable && independentEffectSize !== null
-      ? { context: "independent", variable: independentEffectVariable, label: "independent effect size", value: `Cohen's d = ${independentEffectSize}`, sourceSection: firstAvailableSection(sourceSections, ["Independent One-Group Analysis", "Unknown Section"]) }
+      ? { context: "independent", variable: independentEffectVariable, label: "independent effect size", value: `Cohen's d = ${independentEffectSize}`, confidence: 0.95, sourceSection: firstAvailableSection(sourceSections, ["Independent One-Group Analysis", "Unknown Section"]) }
       : null,
   ].filter(Boolean);
   const significanceFindings = pairedPValue
-    ? [{ context: "paired", label: "p-value", value: formatPValue(pairedPValue), sourceSection: firstAvailableSection(sourceSections, ["Dependent Data Analysis", "Unknown Section"]) }]
+    ? [{ context: "paired", label: "p-value", value: formatPValue(pairedPValue), confidence: pairedPValue.includes("reported") ? 0.7 : 0.96, sourceSection: firstAvailableSection(sourceSections, ["Dependent Data Analysis", "Unknown Section"]) }]
     : [];
 
   if (independentEffectVariable && independentEffectSize !== null) {
@@ -329,6 +362,7 @@ function extractFactLayer(source) {
     sourcePath: source.path,
     sourceSections,
     sampleSize,
+    sampleSizeFact,
     variables,
     measurements,
     normality,
@@ -370,11 +404,29 @@ function extractFactLayer(source) {
   };
 }
 
+function collectConfidences(value) {
+  if (!value) return [];
+  if (typeof value === "object" && typeof value.confidence === "number") {
+    const normalized = normalizeConfidence(value.confidence);
+    return normalized === null ? [] : [normalized];
+  }
+  if (Array.isArray(value)) return value.flatMap(collectConfidences);
+  if (typeof value === "object") return Object.values(value).flatMap(collectConfidences);
+  return [];
+}
+
+function aggregateConfidence(content) {
+  const values = collectConfidences(content).filter((value) => value >= 0.3);
+  if (values.length === 0) return null;
+  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
+}
+
 function artifactEnvelope(type, source, content, warnings = []) {
   return {
     artifactType: type,
     schemaVersion: SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
+    overallConfidence: aggregateConfidence(content),
     provenance: {
       sourcePath: source.path,
       sourceHash: source.hash,
@@ -393,8 +445,9 @@ function artifactEnvelope(type, source, content, warnings = []) {
   };
 }
 
-function keyFinding(claim, sourceSection) {
-  return { claim, sourceSection };
+function keyFinding(claim, sourceSection, confidence = 0.7) {
+  const normalizedConfidence = normalizeConfidence(confidence);
+  return { claim, sourceSection, confidence: normalizedConfidence, supported: Boolean(claim) && normalizedConfidence !== null && normalizedConfidence >= 0.3 };
 }
 
 function findEvidence(facts, typeOrLabel) {
@@ -465,10 +518,10 @@ function generateExecutiveSummary(source, facts) {
     : `The analysis centers on ${overviewFocus}.`;
 
   const keyFindings = [];
-  if (medianEvidence) keyFindings.push(keyFinding(medianEvidence.value, medianEvidence.sourceSection));
-  if (significanceEvidence && comparison) keyFindings.push(keyFinding(`${comparison.label} is statistically significant (${significanceEvidence.value}).`, significanceEvidence.sourceSection));
-  if (pairedEffectEvidence) keyFindings.push(keyFinding(`The paired effect size is ${pairedEffectEvidence.value}, which indicates a large negative effect.`, pairedEffectEvidence.sourceSection));
-  if (independentEffectEvidence) keyFindings.push(keyFinding(`The independent analysis reports ${independentEffectEvidence.value}.`, independentEffectEvidence.sourceSection));
+  if (medianEvidence) keyFindings.push(keyFinding(medianEvidence.value, medianEvidence.sourceSection, medianEvidence.confidence));
+  if (significanceEvidence && comparison) keyFindings.push(keyFinding(`${comparison.label} is statistically significant (${significanceEvidence.value}).`, significanceEvidence.sourceSection, significanceEvidence.confidence));
+  if (pairedEffectEvidence) keyFindings.push(keyFinding(`The paired effect size is ${pairedEffectEvidence.value}, which indicates a large negative effect.`, pairedEffectEvidence.sourceSection, pairedEffectEvidence.confidence));
+  if (independentEffectEvidence) keyFindings.push(keyFinding(`The independent analysis reports ${independentEffectEvidence.value}.`, independentEffectEvidence.sourceSection, independentEffectEvidence.confidence));
   if (keyFindings.length === 0) {
     keyFindings.push(...facts.mainFindings.slice(0, 4).map((finding) => keyFinding(finding, firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"]))));
   }
@@ -512,8 +565,8 @@ function generateExecutiveSummary(source, facts) {
   });
 }
 
-function makeQuizQuestion(id, type, difficulty, question, answer, sourceReference) {
-  return { id, type, difficulty, question, answer, sourceReference };
+function makeQuizQuestion(id, type, difficulty, question, answer, sourceReference, confidence = null) {
+  return { id, type, difficulty, question, answer, sourceReference, confidence: normalizeConfidence(confidence) };
 }
 
 function generateQuiz(source, facts) {
@@ -543,25 +596,25 @@ function generateQuiz(source, facts) {
   const pairedEffectEvidence = findEvidence(facts, "paired effect size");
   const significanceEvidence = findEvidence(facts, "significance");
   const questions = [
-    makeQuizQuestion("q1", "fact-recall", "easy", "What sample size was used in the analysis?", facts.sampleSize ? `The analysis used n = ${facts.sampleSize}.` : "No sample size was extracted from the source.", firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"])),
-    makeQuizQuestion("q2", "fact-recall", "easy", "Which variables or measurements were detected?", variableNames.length > 0 ? `The detected variables include ${variableNames.slice(0, 5).join(", ")}.` : "No explicit variable table was detected.", firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"])),
+    makeQuizQuestion("q1", "fact-recall", "easy", "What sample size was used in the analysis?", facts.sampleSize ? `The analysis used n = ${facts.sampleSize}.` : "No sample size was extracted from the source.", firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"]), facts.sampleSizeFact?.confidence),
+    makeQuizQuestion("q2", "fact-recall", "easy", "Which variables or measurements were detected?", variableNames.length > 0 ? `The detected variables include ${variableNames.slice(0, 5).join(", ")}.` : "No explicit variable table was detected.", firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"]), variableNames.length > 0 ? 0.75 : null),
   ];
 
   if (comparison && medianEvidence) {
-    questions.push(makeQuizQuestion("q3", "comparison", "medium", `What changed in ${comparison.label}?`, medianEvidence.value, comparison.sourceSection));
+    questions.push(makeQuizQuestion("q3", "comparison", "medium", `What changed in ${comparison.label}?`, medianEvidence.value, comparison.sourceSection, medianEvidence.confidence));
   }
   if (pairedEffectEvidence) {
-    questions.push(makeQuizQuestion("q4", "interpretation", "medium", `What does the effect size ${pairedEffectEvidence.value} mean?`, "It indicates a large negative effect, with later values substantially lower than earlier values.", pairedEffectEvidence.sourceSection));
+    questions.push(makeQuizQuestion("q4", "interpretation", "medium", `What does the effect size ${pairedEffectEvidence.value} mean?`, "It indicates a large negative effect, with later values substantially lower than earlier values.", pairedEffectEvidence.sourceSection, pairedEffectEvidence.confidence));
   }
   if (comparison) {
-    questions.push(makeQuizQuestion("q5", "method-selection", "medium", `Which test was used for ${comparison.label}?`, facts.dependentAnalysis.test ? `${facts.dependentAnalysis.test} was used for the paired comparison.` : "The source did not specify a named test for this comparison.", comparison.sourceSection));
+    questions.push(makeQuizQuestion("q5", "method-selection", "medium", `Which test was used for ${comparison.label}?`, facts.dependentAnalysis.test ? `${facts.dependentAnalysis.test} was used for the paired comparison.` : "The source did not specify a named test for this comparison.", comparison.sourceSection, facts.dependentAnalysis.test ? 0.75 : null));
   }
   if (significanceEvidence && pairedEffectEvidence) {
-    questions.push(makeQuizQuestion("q6", "interpretation", "hard", "Why should the result be reported with both p-value and effect size?", `${significanceEvidence.value} establishes statistical significance, while ${pairedEffectEvidence.value} explains the magnitude and direction of the effect.`, significanceEvidence.sourceSection));
+    questions.push(makeQuizQuestion("q6", "interpretation", "hard", "Why should the result be reported with both p-value and effect size?", `${significanceEvidence.value} establishes statistical significance, while ${pairedEffectEvidence.value} explains the magnitude and direction of the effect.`, significanceEvidence.sourceSection, Math.min(significanceEvidence.confidence, pairedEffectEvidence.confidence)));
   }
   const normalVariable = Object.entries(facts.normality).find(([, result]) => result.isNormal);
   if (normalVariable) {
-    questions.push(makeQuizQuestion("q7", "method-selection", "medium", `Why was a parametric test appropriate for ${normalVariable[0]}?`, `${normalVariable[0]} was reported as normally distributed, so a parametric test was appropriate where that variable was analyzed independently.`, firstAvailableSection(facts.sourceSections, ["Independent One-Group Analysis", "Statistical Methods Summary", "Unknown Section"])));
+    questions.push(makeQuizQuestion("q7", "method-selection", "medium", `Why was a parametric test appropriate for ${normalVariable[0]}?`, `${normalVariable[0]} was reported as normally distributed, so a parametric test was appropriate where that variable was analyzed independently.`, firstAvailableSection(facts.sourceSections, ["Independent One-Group Analysis", "Statistical Methods Summary", "Unknown Section"]), 0.75));
   }
 
   while (questions.length < 5) {
@@ -586,21 +639,21 @@ function generateFaq(source, facts) {
   const variableNames = Object.keys(facts.variables);
 
   const items = [
-    makeFaqItem("faq1", "easy", "What was the sample size?", facts.sampleSize ? `The analysis included ${facts.sampleSize} observations.` : "No sample size was extracted from the source.", firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"])),
-    makeFaqItem("faq2", "easy", "Which variables were detected?", variableNames.length > 0 ? `The detected variables include ${variableNames.slice(0, 5).join(", ")}.` : "No explicit variables were detected.", firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"])),
-    makeFaqItem("faq7", "medium", "How should this result be visualized?", visualRecommendation(facts), firstAvailableSection(facts.sourceSections, ["Visual Suggestions", "Unknown Section"])),
-    makeFaqItem("faq8", "hard", "Can statistical significance be misleading here?", significanceEvidence && pairedEffectEvidence ? `Yes. ${significanceEvidence.value} shows the result is statistically reliable, but ${pairedEffectEvidence.value} is needed to judge how large the change is.` : "Yes. Statistical significance should not be interpreted without checking the available effect-size or practical evidence.", significanceEvidence?.sourceSection || firstAvailableSection(facts.sourceSections, ["Dependent Data Analysis", "Unknown Section"])),
-    makeFaqItem("faq9", "hard", "What are the main limitations of this analysis?", "The artifact should be interpreted within the source context, and the MVP also depends on rule-based extraction from the source format.", firstAvailableSection(facts.sourceSections, ["Dependent Data Analysis", "Unknown Section"])),
+    makeFaqItem("faq1", "easy", "What was the sample size?", facts.sampleSize ? `The analysis included ${facts.sampleSize} observations.` : "No sample size was extracted from the source.", firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"]), facts.sampleSizeFact?.confidence),
+    makeFaqItem("faq2", "easy", "Which variables were detected?", variableNames.length > 0 ? `The detected variables include ${variableNames.slice(0, 5).join(", ")}.` : "No explicit variables were detected.", firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"]), variableNames.length > 0 ? 0.75 : null),
+    makeFaqItem("faq7", "medium", "How should this result be visualized?", visualRecommendation(facts), firstAvailableSection(facts.sourceSections, ["Visual Suggestions", "Unknown Section"]), facts.visualSuggestions.length > 0 ? 0.75 : 0.45),
+    makeFaqItem("faq8", "hard", "Can statistical significance be misleading here?", significanceEvidence && pairedEffectEvidence ? `Yes. ${significanceEvidence.value} shows the result is statistically reliable, but ${pairedEffectEvidence.value} is needed to judge how large the change is.` : "Yes. Statistical significance should not be interpreted without checking the available effect-size or practical evidence.", significanceEvidence?.sourceSection || firstAvailableSection(facts.sourceSections, ["Dependent Data Analysis", "Unknown Section"]), significanceEvidence && pairedEffectEvidence ? Math.min(significanceEvidence.confidence, pairedEffectEvidence.confidence) : 0.45),
+    makeFaqItem("faq9", "hard", "What are the main limitations of this analysis?", "The artifact should be interpreted within the source context, and the MVP also depends on rule-based extraction from the source format.", firstAvailableSection(facts.sourceSections, ["Dependent Data Analysis", "Unknown Section"]), 0.6),
   ];
 
   if (comparison && medianEvidence) {
-    items.splice(2, 0, makeFaqItem("faq3", "medium", `What changed in ${comparison.label}?`, medianEvidence.value, comparison.sourceSection));
+    items.splice(2, 0, makeFaqItem("faq3", "medium", `What changed in ${comparison.label}?`, medianEvidence.value, comparison.sourceSection, medianEvidence.confidence));
   }
   if (significanceEvidence) {
-    items.splice(3, 0, makeFaqItem("faq4", "medium", "Is the main result statistically significant?", `Yes. The analysis reports ${significanceEvidence.value}, which is statistically significant at the stated threshold.`, significanceEvidence.sourceSection));
+    items.splice(3, 0, makeFaqItem("faq4", "medium", "Is the main result statistically significant?", `Yes. The analysis reports ${significanceEvidence.value}, which is statistically significant at the stated threshold.`, significanceEvidence.sourceSection, significanceEvidence.confidence));
   }
   if (pairedEffectEvidence) {
-    items.splice(4, 0, makeFaqItem("faq5", "medium", "What does the effect size mean?", `${pairedEffectEvidence.value} indicates a large negative effect, so later values are meaningfully lower than earlier values.`, pairedEffectEvidence.sourceSection));
+    items.splice(4, 0, makeFaqItem("faq5", "medium", "What does the effect size mean?", `${pairedEffectEvidence.value} indicates a large negative effect, so later values are meaningfully lower than earlier values.`, pairedEffectEvidence.sourceSection, pairedEffectEvidence.confidence));
   }
   if (facts.dependentAnalysis.test) {
     items.splice(5, 0, makeFaqItem("faq6", "hard", "Why was the paired comparison method selected?", `${facts.dependentAnalysis.test} was used because the paired comparison was treated as dependent, non-normal data.`, firstAvailableSection(facts.sourceSections, ["Statistical Methods Summary", "Unknown Section"])));
@@ -639,8 +692,8 @@ function generateFaq(source, facts) {
   });
 }
 
-function makeFaqItem(id, difficulty, question, answer, sourceReference) {
-  return { id, question, answer, sourceReference, difficulty };
+function makeFaqItem(id, difficulty, question, answer, sourceReference, confidence = null) {
+  return { id, question, answer, sourceReference, difficulty, confidence: normalizeConfidence(confidence) };
 }
 
 function generateInsightBrief(source, facts) {
@@ -662,6 +715,7 @@ function generateInsightBrief(source, facts) {
         "The extracted statistic shows a substantial change across the comparison, so the result is not just a small directional movement. This supports making the comparison the primary message when communicating the analysis.",
       evidence: [medianEvidence.value, pairedEffectEvidence?.value].filter(Boolean),
       sourceSection: comparison.sourceSection,
+      confidence: Math.min(medianEvidence.confidence, pairedEffectEvidence?.confidence || medianEvidence.confidence),
     });
   }
   if (significanceEvidence) {
@@ -671,6 +725,7 @@ function generateInsightBrief(source, facts) {
         "The extracted significance evidence reduces the risk that the observed difference is treated as noise. It should still be interpreted with effect size or practical evidence rather than used alone.",
       evidence: [significanceEvidence.value, confidenceEvidence?.value].filter(Boolean),
       sourceSection: significanceEvidence.sourceSection,
+      confidence: significanceEvidence.confidence,
     });
   }
   if (pairedEffectEvidence) {
@@ -680,6 +735,7 @@ function generateInsightBrief(source, facts) {
         "The effect-size evidence explains more than whether a difference exists. It helps decision makers understand the strength and direction of the relationship before acting on the finding.",
       evidence: [pairedEffectEvidence.value, confidenceEvidence?.value].filter(Boolean),
       sourceSection: pairedEffectEvidence.sourceSection,
+      confidence: pairedEffectEvidence.confidence,
     });
   }
   if (independentEffectEvidence) {
@@ -689,6 +745,7 @@ function generateInsightBrief(source, facts) {
         "The independent effect-size evidence answers a different question from the paired comparison. Keeping these findings separate avoids mixing distinct statistical claims in one decision message.",
       evidence: [independentEffectEvidence.value, "Reference value = 1"].filter(Boolean),
       sourceSection: independentEffectEvidence.sourceSection,
+      confidence: independentEffectEvidence.confidence,
     });
   }
   while (supportingInsights.length < 3) {
@@ -698,6 +755,7 @@ function generateInsightBrief(source, facts) {
         "The source does not provide enough structured statistical evidence for a stronger claim. A conservative decision artifact should surface that limitation rather than infer missing facts.",
       evidence: facts.evidence.slice(0, 2).map((item) => item.value),
       sourceSection: firstAvailableSection(facts.sourceSections, ["Unknown Section"]),
+      confidence: 0.45,
     });
   }
   const sourceMappings = [
@@ -777,6 +835,7 @@ function generateComparisonMatrix(source, facts) {
       keyMetrics: metrics,
       interpretation: comparisonInterpretation(comparison, metrics),
       sourceReference: comparison.sourceSection || firstAvailableSection(facts.sourceSections, ["Unknown Section"]),
+      confidence: normalizeConfidence(comparison.confidence) || (facts.evidence.length > 0 ? aggregateConfidence(facts.evidence) : null),
     };
   });
 
@@ -832,6 +891,185 @@ function generateWorksheet(source, facts) {
     guidedQuestions: questions,
     answerKey,
     sourceReferences: [...new Set(questions.map((question) => question.sourceReference).concat(generalSection))],
+  });
+}
+
+function generateSlideDeck(source, facts) {
+  const comparison = primaryComparison(facts);
+  const evidenceSection = comparison?.sourceSection || firstAvailableSection(facts.sourceSections, ["Unknown Section"]);
+  const evidenceBullets = facts.evidence.slice(0, 4).map((item) => ({
+    text: `${item.label}: ${item.value}`,
+    sourceReference: item.sourceSection,
+  }));
+
+  return artifactEnvelope("slide-deck", source, {
+    title: comparison ? `Slide Deck: ${comparison.label}` : "Slide Deck",
+    status: "draft",
+    slides: [
+      {
+        title: "Main Message",
+        sourceReference: evidenceSection,
+        confidence: comparison?.confidence || 0.6,
+        bullets: [
+          {
+            text: comparison ? `${comparison.label} is the main analytical relationship detected in the source.` : "No explicit comparison was detected, so the deck stays close to available facts.",
+            sourceReference: evidenceSection,
+          },
+        ],
+      },
+      {
+        title: "Evidence",
+        sourceReference: evidenceSection,
+        confidence: evidenceBullets.length > 0 ? 0.9 : 0.4,
+        bullets: evidenceBullets.length > 0 ? evidenceBullets : [{ text: "Structured evidence is not available in the source.", sourceReference: evidenceSection }],
+      },
+      {
+        title: "Interpretation",
+        sourceReference: evidenceSection,
+        confidence: comparison?.confidence || 0.5,
+        bullets: [
+          {
+            text: comparison ? comparisonInterpretation(comparison, comparisonKeyMetrics(comparison, facts)) : "Interpret cautiously because no comparison-level evidence was extracted.",
+            sourceReference: evidenceSection,
+          },
+        ],
+      },
+      {
+        title: "Implications",
+        sourceReference: evidenceSection,
+        confidence: 0.65,
+        bullets: [
+          {
+            text: comparison ? `${comparison.label} should be discussed with source evidence visible.` : "Implications are limited because no comparison was extracted.",
+            sourceReference: evidenceSection,
+          },
+        ],
+      },
+      {
+        title: "Action",
+        sourceReference: firstAvailableSection(facts.sourceSections, ["Visual Suggestions", evidenceSection]),
+        confidence: 0.65,
+        bullets: [
+          {
+            text: `${visualRecommendation(facts)} Keep source evidence visible when presenting the result.`,
+            sourceReference: firstAvailableSection(facts.sourceSections, ["Visual Suggestions", evidenceSection]),
+          },
+        ],
+      },
+    ],
+  });
+}
+
+function generateDecisionCard(source, facts) {
+  const comparison = primaryComparison(facts);
+  const evidence = facts.evidence.slice(0, 4);
+  const evidenceSection = comparison?.sourceSection || firstAvailableSection(facts.sourceSections, ["Unknown Section"]);
+  const confidence = evidence.length > 0 ? Number((evidence.reduce((sum, item) => sum + item.confidence, 0) / evidence.length).toFixed(2)) : 0.45;
+
+  return artifactEnvelope("decision-card", source, {
+    title: "Decision Card",
+    status: "draft",
+    mainDecision: {
+      claim: comparison ? `Use ${comparison.label} as the main discussion point.` : "Use the available facts cautiously; no explicit comparison was detected.",
+      sourceSection: evidenceSection,
+      confidence,
+      supported: confidence >= 0.3,
+    },
+    supportingEvidence: evidence.map((item) => ({
+      value: item.value,
+      sourceSection: item.sourceSection,
+      confidence: item.confidence,
+      supported: item.supported,
+    })),
+    recommendedAction: {
+      claim: evidence.length > 0 ? `${visualRecommendation(facts)} Keep source labels visible when presenting the claim.` : "Collect more source evidence before making a strong recommendation.",
+      sourceSection: firstAvailableSection(facts.sourceSections, ["Visual Suggestions", evidenceSection]),
+      confidence: evidence.length > 0 ? 0.65 : 0.35,
+      supported: true,
+    },
+  });
+}
+
+function generateSummaryNotes(source, facts) {
+  const comparison = primaryComparison(facts);
+  const generalSection = firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"]);
+  const evidenceSection = comparison?.sourceSection || firstAvailableSection(facts.sourceSections, ["Unknown Section"]);
+  const evidenceBullets = facts.evidence.map((item) => ({ text: `${item.label}: ${item.value}`, sourceReference: item.sourceSection }));
+
+  return artifactEnvelope("summary-notes", source, {
+    title: "Summary Notes",
+    status: "draft",
+    notes: [
+      {
+        heading: "Context",
+        bullets: [
+          { text: facts.sampleSize ? `Sample size: n = ${facts.sampleSize}.` : "Sample size is not available.", sourceReference: generalSection },
+          { text: comparison ? `Main comparison: ${comparison.label}.` : "No explicit comparison was detected.", sourceReference: evidenceSection },
+        ],
+      },
+      {
+        heading: "Evidence",
+        bullets: evidenceBullets.length > 0 ? evidenceBullets : [{ text: "No structured evidence was extracted.", sourceReference: evidenceSection }],
+      },
+      {
+        heading: "Takeaway",
+        bullets: [
+          {
+            text: comparison ? `${comparison.label} should be discussed with its supporting metrics and source context.` : "Use only the available facts and avoid unsupported conclusions.",
+            sourceReference: evidenceSection,
+          },
+        ],
+      },
+    ],
+  });
+}
+
+function generateTeachingOutline(source, facts) {
+  const comparison = primaryComparison(facts);
+  const generalSection = firstAvailableSection(facts.sourceSections, ["General Information", "Unknown Section"]);
+  const methodSection = firstAvailableSection(facts.sourceSections, ["Statistical Methods Summary", "Unknown Section"]);
+  const evidenceSection = comparison?.sourceSection || firstAvailableSection(facts.sourceSections, ["Unknown Section"]);
+
+  return artifactEnvelope("teaching-outline", source, {
+    title: comparison ? `Teaching Outline: ${comparison.label}` : "Teaching Outline",
+    status: "draft",
+    sections: [
+      {
+        title: "Start With Context",
+        explanationOrder: 1,
+        teachingPoint: facts.sampleSize ? `Explain that the analysis is based on n = ${facts.sampleSize}.` : "Explain that sample size was not extracted.",
+        confidence: facts.sampleSize ? 0.95 : 0.35,
+        sourceReference: generalSection,
+      },
+      {
+        title: "Introduce the Main Relationship",
+        explanationOrder: 2,
+        teachingPoint: comparison ? `Define ${comparison.label} before showing metrics.` : "Show the available facts before making interpretations.",
+        confidence: comparison?.confidence || 0.45,
+        sourceReference: evidenceSection,
+      },
+      {
+        title: "Read the Evidence",
+        explanationOrder: 3,
+        teachingPoint: facts.evidence.length > 0 ? `Use evidence such as ${facts.evidence[0].value} to practice evidence reading.` : "Ask learners to identify what evidence is missing.",
+        confidence: facts.evidence[0]?.confidence || 0.35,
+        sourceReference: evidenceSection,
+      },
+      {
+        title: "Explain the Method",
+        explanationOrder: 4,
+        teachingPoint: facts.methods.length > 0 ? `Discuss why ${facts.methods[0]} appears in the method summary.` : "Avoid inventing method details if the source does not provide them.",
+        confidence: facts.methods.length > 0 ? 0.7 : 0.35,
+        sourceReference: methodSection,
+      },
+      {
+        title: "Close With Interpretation",
+        explanationOrder: 5,
+        teachingPoint: "Ask learners to separate what the source proves from what still needs domain context.",
+        confidence: 0.6,
+        sourceReference: evidenceSection,
+      },
+    ],
   });
 }
 
@@ -1148,6 +1386,15 @@ function renderList(items, mapper = (item) => item) {
   return `<ul>${items.map((item) => `<li>${mapper(item)}</li>`).join("")}</ul>`;
 }
 
+function confidenceBadge(confidence) {
+  const normalized = normalizeConfidence(confidence);
+  if (normalized === null) {
+    return `<span class="confidence neutral" title="confidence: not scored">Not scored</span>`;
+  }
+  const label = confidenceLabel(normalized);
+  return `<span class="confidence ${label}" data-confidence="${normalized}" title="confidence: ${normalized}">${label} ${(normalized * 100).toFixed(0)}%</span>`;
+}
+
 function renderExecutiveSummary(artifact) {
   const content = artifact.content;
   const findings = (content.keyFindings || [])
@@ -1156,6 +1403,7 @@ function renderExecutiveSummary(artifact) {
         <article class="finding-card">
           <p>${highlightMetrics(finding.claim)}</p>
           <span class="source-pill">${escapeHtml(finding.sourceSection)}</span>
+          ${confidenceBadge(finding.confidence)}
         </article>`
     )
     .join("");
@@ -1195,6 +1443,7 @@ function renderInsightBrief(artifact) {
           <p>${highlightMetrics(insight.reasoning)}</p>
           ${insight.evidence?.length ? `<div class="chips">${insight.evidence.map((item) => `<span>${highlightMetrics(item)}</span>`).join("")}</div>` : ""}
           <p class="source">Source: ${escapeHtml(insight.sourceSection)}</p>
+          ${confidenceBadge(insight.confidence)}
         </div>`
     )
     .join("");
@@ -1224,7 +1473,7 @@ function renderComparisonMatrix(artifact) {
         <tr>
           <td><strong>${escapeHtml(comparison.label)}</strong><br><span class="source">${escapeHtml(comparison.comparisonType)}</span></td>
           <td>${renderList(comparison.keyMetrics || [], highlightMetrics)}</td>
-          <td>${highlightMetrics(comparison.interpretation)}<br><span class="source">Source: ${escapeHtml(comparison.sourceReference)}</span></td>
+          <td>${highlightMetrics(comparison.interpretation)}<br><span class="source">Source: ${escapeHtml(comparison.sourceReference)}</span> ${confidenceBadge(comparison.confidence)}</td>
         </tr>`
     )
     .join("");
@@ -1253,6 +1502,7 @@ function renderFAQ(artifact) {
           <summary>${escapeHtml(item.question)} <span class="tag">${escapeHtml(item.difficulty)}</span></summary>
           <p>${highlightMetrics(item.answer)}</p>
           <p class="source">Source: ${escapeHtml(item.sourceReference)}</p>
+          ${confidenceBadge(item.confidence)}
         </details>`
     )
     .join("");
@@ -1273,6 +1523,7 @@ function renderQuiz(artifact) {
           <h3>${escapeHtml(question.id)}. ${escapeHtml(question.question)}</h3>
           <div class="answer-box"><strong>Answer</strong><p>${highlightMetrics(question.answer)}</p></div>
           <p class="source">Type: ${escapeHtml(question.type)} | Source: ${escapeHtml(question.sourceReference)}</p>
+          ${confidenceBadge(question.confidence)}
         </div>`
     )
     .join("");
@@ -1430,6 +1681,11 @@ function renderReport(artifacts, facts) {
     .stack { display: grid; gap: 12px; }
     .source, .note { color: var(--muted); font-size: 14px; }
     .source-pill, .tag { display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 999px; background: #e8f3f1; color: #115e59; font-size: 12px; font-weight: 700; }
+    .confidence { display: inline-block; margin: 8px 0 0 6px; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+    .confidence.high { background: #dcfce7; color: #166534; }
+    .confidence.medium { background: #fef9c3; color: #854d0e; }
+    .confidence.low { background: #fee2e2; color: #991b1b; }
+    .confidence.neutral { background: #e2e8f0; color: #475569; }
     .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
     .chips span { border: 1px solid #b9d8d3; background: #eef8f6; border-radius: 999px; padding: 4px 9px; font-size: 13px; }
     .step-label { display: inline-block; margin-top: 4px; color: var(--accent); font-size: 12px; font-weight: 700; text-transform: uppercase; }
@@ -1489,6 +1745,159 @@ function openReport(filePath) {
   });
 }
 
+function sourceFromText(content, sourcePath = "studio-input.md") {
+  const normalized = String(content || "").replace(/\r\n/g, "\n").trim();
+  return {
+    path: sourcePath,
+    content: String(content || ""),
+    normalized,
+    hash: crypto.createHash("sha256").update(String(content || "")).digest("hex"),
+    wordCount: normalized ? normalized.split(/\s+/).length : 0,
+    lineCount: content ? String(content).split(/\r?\n/).length : 0,
+    isEmpty: normalized.length === 0,
+  };
+}
+
+function normalizeArtifactType(type) {
+  return String(type || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+}
+
+function generateArtifactByType(type, source, facts) {
+  const artifactType = normalizeArtifactType(type);
+  const generators = {
+    "executive-summary": generateExecutiveSummary,
+    "insight-brief": generateInsightBrief,
+    faq: generateFaq,
+    quiz: generateQuiz,
+    worksheet: generateWorksheet,
+    "comparison-matrix": generateComparisonMatrix,
+    "slide-deck": generateSlideDeck,
+    "summary-notes": generateSummaryNotes,
+    "teaching-outline": generateTeachingOutline,
+    "decision-card": generateDecisionCard,
+  };
+  const generator = generators[artifactType];
+  if (!generator) throw new Error(`Unsupported artifact type: ${type}`);
+  return generator(source, facts);
+}
+
+function audienceIntro(audience, tone) {
+  if (audience === "student") return tone === "technical" ? "Study focus: connect each claim to its evidence." : "Study focus: understand the main idea before the details.";
+  if (audience === "technical") return "Technical focus: check method, evidence, and source traceability.";
+  return "Decision focus: use the evidence to understand impact and next steps.";
+}
+
+function renderStudioArtifact(artifact, options = {}) {
+  const audience = options.audience || "decision-maker";
+  const tone = options.tone || "simple";
+  const prefix = `<p class="studio-note">${escapeHtml(audienceIntro(audience, tone))}</p>`;
+  const type = artifact.artifactType;
+
+  if (type === "executive-summary") return prefix + renderExecutiveSummary(artifact);
+  if (type === "insight-brief") return prefix + renderInsightBrief(artifact);
+  if (type === "faq") return prefix + renderFAQ(artifact);
+  if (type === "quiz") return prefix + renderQuiz(artifact);
+  if (type === "worksheet") return prefix + renderWorksheet(artifact);
+  if (type === "comparison-matrix") return prefix + renderComparisonMatrix(artifact);
+  if (type === "slide-deck") {
+    const slides = artifact.content.slides
+      .map(
+        (slide, index) => `
+          <section class="studio-card">
+            <h3>Slide ${index + 1}: ${escapeHtml(slide.title)}</h3>
+            ${renderList(slide.bullets || [], (bullet) => `${highlightMetrics(bullet.text)} <span class="source-pill">${escapeHtml(bullet.sourceReference)}</span>`)}
+          </section>`
+      )
+      .join("");
+    return `${prefix}<section class="report-section"><h2>${escapeHtml(artifact.content.title)}</h2>${slides}</section>`;
+  }
+  if (type === "decision-card") {
+    const card = artifact.content;
+    const evidence = card.supportingEvidence
+      .filter((item) => item.supported)
+      .map((item) => `<li>${highlightMetrics(item.value)} <span class="source-pill">${escapeHtml(item.sourceSection)}</span> ${confidenceBadge(item.confidence)}</li>`)
+      .join("");
+    return `${prefix}<section class="report-section decision-card"><h2>${escapeHtml(card.title)}</h2><h3>Main decision</h3><p>${highlightMetrics(card.mainDecision.claim)}</p><span class="source-pill">${escapeHtml(card.mainDecision.sourceSection)}</span> ${confidenceBadge(card.mainDecision.confidence)}<h3>Supporting evidence</h3><ul>${evidence || "<li>Not available in source</li>"}</ul><h3>Recommended action</h3><p>${highlightMetrics(card.recommendedAction.claim)}</p><span class="source-pill">${escapeHtml(card.recommendedAction.sourceSection)}</span> ${confidenceBadge(card.recommendedAction.confidence)}</section>`;
+  }
+  if (type === "summary-notes") {
+    const notes = artifact.content.notes
+      .map((note) => `<section class="studio-card"><h3>${escapeHtml(note.heading)}</h3>${renderList(note.bullets || [], (bullet) => `${highlightMetrics(bullet.text)} <span class="source-pill">${escapeHtml(bullet.sourceReference)}</span>`)}</section>`)
+      .join("");
+    return `${prefix}<section class="report-section"><h2>${escapeHtml(artifact.content.title)}</h2>${notes}</section>`;
+  }
+  if (type === "teaching-outline") {
+    const sections = artifact.content.sections
+      .map((section) => `<section class="studio-card"><h3>${section.explanationOrder}. ${escapeHtml(section.title)}</h3><p>${highlightMetrics(section.teachingPoint)}</p><span class="source-pill">${escapeHtml(section.sourceReference)}</span> ${confidenceBadge(section.confidence)}</section>`)
+      .join("");
+    return `${prefix}<section class="report-section"><h2>${escapeHtml(artifact.content.title)}</h2>${sections}</section>`;
+  }
+
+  throw new Error(`No renderer for artifact type: ${type}`);
+}
+
+function artifactToPlainText(artifact) {
+  return collectContentStrings(artifact.content).join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
+function assertStudioOutputQuality(html, artifact) {
+  const forbidden = ["undefined", "null", "[object Object]", "{\"", "artifactType", "schemaVersion", "provenance"];
+  const found = forbidden.filter((token) => html.includes(token));
+  if (found.length > 0) throw new Error(`Studio output failed quality check: ${found.join(", ")}`);
+  if (collectContentStrings(artifact.content).length === 0) throw new Error("Studio output has no readable content.");
+  const unsupported = [];
+  function walk(value) {
+    if (!value || typeof value !== "object") return;
+    if (value.supported === false) unsupported.push(value.claim || value.value || "unsupported claim");
+    if (Array.isArray(value)) value.forEach(walk);
+    else Object.values(value).forEach(walk);
+  }
+  walk(artifact.content);
+  if (unsupported.length > 0) throw new Error(`Studio output contains unsupported claims: ${unsupported.join(", ")}`);
+}
+
+function compileStudioArtifact(content, options = {}) {
+  const source = sourceFromText(content);
+  const facts = extractFactLayer(source);
+  const artifact = generateArtifactByType(options.artifactType || "executive-summary", source, facts);
+  const html = renderStudioArtifact(artifact, options);
+  assertStudioOutputQuality(html, artifact);
+  return {
+    artifact,
+    presentationHtml: artifact.artifactType === "slide-deck" ? renderSlidePresentation(artifact) : "",
+    facts: {
+      sampleSize: facts.sampleSize,
+      sampleSizeFact: facts.sampleSizeFact,
+      sourceSections: facts.sourceSections,
+      variables: Object.keys(facts.variables),
+      comparisons: facts.comparisons.map((comparison) => ({ label: comparison.label, type: comparison.type, sourceSection: comparison.sourceSection })),
+      evidence: facts.evidence,
+    },
+    html,
+    text: artifactToPlainText(artifact),
+  };
+}
+
+function renderSlidePresentation(artifact) {
+  if (artifact.artifactType !== "slide-deck") return "";
+  return `
+    <div class="slide-stage" data-slide-index="0">
+      ${(artifact.content.slides || [])
+        .map(
+          (slide, index) => `
+            <section class="slide ${index === 0 ? "active" : ""}" data-slide="${index}">
+              <p class="slide-kicker">Slide ${index + 1}</p>
+              <h2>${escapeHtml(slide.title)}</h2>
+              <ul>${(slide.bullets || []).map((bullet) => `<li>${highlightMetrics(bullet.text)} <span>${escapeHtml(bullet.sourceReference)}</span></li>`).join("")}</ul>
+              ${confidenceBadge(slide.confidence)}
+            </section>`
+        )
+        .join("")}
+    </div>`;
+}
+
 function main() {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
@@ -1515,4 +1924,15 @@ function main() {
   openReport(reportPath);
 }
 
-main();
+module.exports = {
+  compileStudioArtifact,
+  extractFactLayer,
+  generateArtifactByType,
+  renderStudioArtifact,
+  sourceFromText,
+  main,
+};
+
+if (require.main === module) {
+  main();
+}

@@ -37,6 +37,11 @@
     .stack { display: grid; gap: 12px; }
     .source, .note { color: var(--muted); font-size: 14px; }
     .source-pill, .tag { display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 999px; background: #e8f3f1; color: #115e59; font-size: 12px; font-weight: 700; }
+    .confidence { display: inline-block; margin: 8px 0 0 6px; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+    .confidence.high { background: #dcfce7; color: #166534; }
+    .confidence.medium { background: #fef9c3; color: #854d0e; }
+    .confidence.low { background: #fee2e2; color: #991b1b; }
+    .confidence.neutral { background: #e2e8f0; color: #475569; }
     .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
     .chips span { border: 1px solid #b9d8d3; background: #eef8f6; border-radius: 999px; padding: 4px 9px; font-size: 13px; }
     .step-label { display: inline-block; margin-top: 4px; color: var(--accent); font-size: 12px; font-weight: 700; text-transform: uppercase; }
@@ -68,7 +73,7 @@
       </div>
       <div class="hero-side">
         <span class="source">Generated</span>
-        <strong>15.04.2026 22:01:43</strong>
+        <strong>16.04.2026 00:02:42</strong>
         <span class="source">6 artifacts compiled</span>
       </div>
     </section>
@@ -109,18 +114,22 @@
         <article class="finding-card">
           <p>Median decreased from 70.456 to 35.047, a <strong>50.3% reduction</strong>.</p>
           <span class="source-pill">Dependent Data Analysis</span>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </article>
         <article class="finding-card">
           <p>Time 1 vs Time 2 is statistically significant (<strong>p &lt; 0.001</strong>).</p>
           <span class="source-pill">Dependent Data Analysis</span>
+          <span class="confidence high" data-confidence="0.98" title="confidence: 0.98">high 98%</span>
         </article>
         <article class="finding-card">
           <p>The paired effect size is <strong>r = -0.613</strong>, which indicates a large negative effect.</p>
           <span class="source-pill">Dependent Data Analysis</span>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </article>
         <article class="finding-card">
           <p>The independent analysis reports <strong>Cohen&#039;s d = 4.186</strong>.</p>
           <span class="source-pill">Independent One-Group Analysis</span>
+          <span class="confidence high" data-confidence="0.95" title="confidence: 0.95">high 95%</span>
         </article></div>
       <div class="two-column">
         <div>
@@ -146,6 +155,7 @@
           <p>The extracted statistic shows a substantial change across the comparison, so the result is not just a small directional movement. This supports making the comparison the primary message when communicating the analysis.</p>
           <div class="chips"><span>Median decreased from 70.456 to 35.047, a <strong>50.3% reduction</strong>.</span><span><strong>r = -0.613</strong></span></div>
           <p class="source">Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </div>
         <div class="insight">
           <span class="step-label">Claim</span>
@@ -154,6 +164,7 @@
           <p>The extracted significance evidence reduces the risk that the observed difference is treated as noise. It should still be interpreted with effect size or practical evidence rather than used alone.</p>
           <div class="chips"><span><strong>p &lt; 0.001</strong></span><span>[-0.686 : -0.527]</span></div>
           <p class="source">Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.98" title="confidence: 0.98">high 98%</span>
         </div>
         <div class="insight">
           <span class="step-label">Claim</span>
@@ -162,6 +173,7 @@
           <p>The effect-size evidence explains more than whether a difference exists. It helps decision makers understand the strength and direction of the relationship before acting on the finding.</p>
           <div class="chips"><span><strong>r = -0.613</strong></span><span>[-0.686 : -0.527]</span></div>
           <p class="source">Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </div>
         <div class="insight">
           <span class="step-label">Claim</span>
@@ -170,6 +182,7 @@
           <p>The independent effect-size evidence answers a different question from the paired comparison. Keeping these findings separate avoids mixing distinct statistical claims in one decision message.</p>
           <div class="chips"><span><strong>Cohen&#039;s d = 4.186</strong></span><span>Reference value = 1</span></div>
           <p class="source">Source: Independent One-Group Analysis</p>
+          <span class="confidence high" data-confidence="0.95" title="confidence: 0.95">high 95%</span>
         </div></div>
       <div class="two-column">
         <div>
@@ -197,12 +210,12 @@
         <tr>
           <td><strong>Time 1 vs Time 2</strong><br><span class="source">paired</span></td>
           <td><ul><li>Median decreased from 70.456 to 35.047, a <strong>50.3% reduction</strong>.</li><li><strong>p &lt; 0.001</strong></li><li><strong>r = -0.613</strong></li><li>[-0.686 : -0.527]</li></ul></td>
-          <td>Direction is downward, strength is large, and the result is statistically reliable; the practical meaning is that later values are much lower than earlier values.<br><span class="source">Source: Dependent Data Analysis</span></td>
+          <td>Direction is downward, strength is large, and the result is statistically reliable; the practical meaning is that later values are much lower than earlier values.<br><span class="source">Source: Dependent Data Analysis</span> <span class="confidence medium" data-confidence="0.75" title="confidence: 0.75">medium 75%</span></td>
         </tr>
         <tr>
           <td><strong>cov1 vs reference value</strong><br><span class="source">independent</span></td>
           <td><ul><li><strong>Cohen&#039;s d = 4.186</strong></li><li>Reference value = 1</li></ul></td>
-          <td>This independent comparison has a reported effect size, so it should be interpreted as a separate finding from the main paired change.<br><span class="source">Source: Independent One-Group Analysis</span></td>
+          <td>This independent comparison has a reported effect size, so it should be interpreted as a separate finding from the main paired change.<br><span class="source">Source: Independent One-Group Analysis</span> <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span></td>
         </tr></tbody>
       </table>
     </section>
@@ -215,51 +228,61 @@
           <summary>What was the sample size? <span class="tag">easy</span></summary>
           <p>The analysis included 240 observations.</p>
           <p class="source">Source: General Information</p>
+          <span class="confidence high" data-confidence="0.95" title="confidence: 0.95">high 95%</span>
         </details>
         <details class="faq-item">
           <summary>Which variables were detected? <span class="tag">easy</span></summary>
           <p>The detected variables include id, f1, recoded_f1, dp1, cov1.</p>
           <p class="source">Source: General Information</p>
+          <span class="confidence medium" data-confidence="0.75" title="confidence: 0.75">medium 75%</span>
         </details>
         <details class="faq-item">
           <summary>What changed in Time 1 vs Time 2? <span class="tag">medium</span></summary>
           <p>Median decreased from 70.456 to 35.047, a <strong>50.3% reduction</strong>.</p>
           <p class="source">Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </details>
         <details class="faq-item">
           <summary>Is the main result statistically significant? <span class="tag">medium</span></summary>
           <p>Yes. The analysis reports <strong>p &lt; 0.001</strong>, which is statistically significant at the stated threshold.</p>
           <p class="source">Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.98" title="confidence: 0.98">high 98%</span>
         </details>
         <details class="faq-item">
           <summary>What does the effect size mean? <span class="tag">medium</span></summary>
           <p><strong>r = -0.613</strong> indicates a large negative effect, so later values are meaningfully lower than earlier values.</p>
           <p class="source">Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </details>
         <details class="faq-item">
           <summary>Why was the paired comparison method selected? <span class="tag">hard</span></summary>
           <p>Wilcoxon signed-rank test was used because the paired comparison was treated as dependent, non-normal data.</p>
           <p class="source">Source: Statistical Methods Summary</p>
+          <span class="confidence neutral" title="confidence: not scored">Not scored</span>
         </details>
         <details class="faq-item">
           <summary>How should this result be visualized? <span class="tag">medium</span></summary>
           <p>Use a slope chart to show Time 1 vs Time 2.</p>
           <p class="source">Source: Visual Suggestions</p>
+          <span class="confidence medium" data-confidence="0.75" title="confidence: 0.75">medium 75%</span>
         </details>
         <details class="faq-item">
           <summary>Can statistical significance be misleading here? <span class="tag">hard</span></summary>
           <p>Yes. <strong>p &lt; 0.001</strong> shows the result is statistically reliable, but <strong>r = -0.613</strong> is needed to judge how large the change is.</p>
           <p class="source">Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </details>
         <details class="faq-item">
           <summary>What are the main limitations of this analysis? <span class="tag">hard</span></summary>
           <p>The artifact should be interpreted within the source context, and the MVP also depends on rule-based extraction from the source format.</p>
           <p class="source">Source: Dependent Data Analysis</p>
+          <span class="confidence medium" data-confidence="0.6" title="confidence: 0.6">medium 60%</span>
         </details>
         <details class="faq-item">
           <summary>What was notable in the independent analysis? <span class="tag">medium</span></summary>
           <p>The independent analysis reported <strong>Cohen&#039;s d = 4.186</strong>.</p>
           <p class="source">Source: Independent One-Group Analysis</p>
+          <span class="confidence neutral" title="confidence: not scored">Not scored</span>
         </details></div>
     </section>
     
@@ -271,36 +294,43 @@
           <h3>q1. What sample size was used in the analysis?</h3>
           <div class="answer-box"><strong>Answer</strong><p>The analysis used <strong>n = 240</strong>.</p></div>
           <p class="source">Type: fact-recall | Source: General Information</p>
+          <span class="confidence high" data-confidence="0.95" title="confidence: 0.95">high 95%</span>
         </div>
         <div class="qa-item">
           <h3>q2. Which variables or measurements were detected?</h3>
           <div class="answer-box"><strong>Answer</strong><p>The detected variables include id, f1, recoded_f1, dp1, cov1.</p></div>
           <p class="source">Type: fact-recall | Source: General Information</p>
+          <span class="confidence medium" data-confidence="0.75" title="confidence: 0.75">medium 75%</span>
         </div>
         <div class="qa-item">
           <h3>q3. What changed in Time 1 vs Time 2?</h3>
           <div class="answer-box"><strong>Answer</strong><p>Median decreased from 70.456 to 35.047, a <strong>50.3% reduction</strong>.</p></div>
           <p class="source">Type: comparison | Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </div>
         <div class="qa-item">
           <h3>q4. What does the effect size r = -0.613 mean?</h3>
           <div class="answer-box"><strong>Answer</strong><p>It indicates a large negative effect, with later values substantially lower than earlier values.</p></div>
           <p class="source">Type: interpretation | Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </div>
         <div class="qa-item">
           <h3>q5. Which test was used for Time 1 vs Time 2?</h3>
           <div class="answer-box"><strong>Answer</strong><p>Wilcoxon signed-rank test was used for the paired comparison.</p></div>
           <p class="source">Type: method-selection | Source: Dependent Data Analysis</p>
+          <span class="confidence medium" data-confidence="0.75" title="confidence: 0.75">medium 75%</span>
         </div>
         <div class="qa-item">
           <h3>q6. Why should the result be reported with both p-value and effect size?</h3>
           <div class="answer-box"><strong>Answer</strong><p><strong>p &lt; 0.001</strong> establishes statistical significance, while <strong>r = -0.613</strong> explains the magnitude and direction of the effect.</p></div>
           <p class="source">Type: interpretation | Source: Dependent Data Analysis</p>
+          <span class="confidence high" data-confidence="0.96" title="confidence: 0.96">high 96%</span>
         </div>
         <div class="qa-item">
           <h3>q7. Why was a parametric test appropriate for cov1?</h3>
           <div class="answer-box"><strong>Answer</strong><p>cov1 was reported as normally distributed, so a parametric test was appropriate where that variable was analyzed independently.</p></div>
           <p class="source">Type: method-selection | Source: Independent One-Group Analysis</p>
+          <span class="confidence medium" data-confidence="0.75" title="confidence: 0.75">medium 75%</span>
         </div>
     </section>
     
@@ -342,7 +372,7 @@
           <div class="answer-box muted-answer"><strong>Suggested answer</strong><p>Median decreased from 70.456 to 35.047, a <strong>50.3% reduction</strong>.</p></div>
         </div>
     </section>
-    <footer>Generated by Studio Agent MVP • 15.04.2026 22:01:43 • 6 artifacts</footer>
+    <footer>Generated by Studio Agent MVP • 16.04.2026 00:02:42 • 6 artifacts</footer>
   </main>
 </body>
 </html>
