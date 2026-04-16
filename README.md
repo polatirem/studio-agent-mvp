@@ -86,3 +86,14 @@ $env:NO_OPEN="1"; npm start
 For the current statistical knowledge base, the report focuses on the Time 1 vs Time 2 comparison. It highlights the median decrease, statistical significance, effect size, confidence interval, and recommended ways to communicate the result.
 
 The JSON artifacts are still kept in `outputs/` so the system remains machine-readable, but `report.html` is the main human-readable demo output.
+
+## Uygulama Görseli
+
+![Studio](assets/studio.png)
+
+![Slide](assets/slide.png)
+
+![Quiz](assets/quiz.png)
+
+
+
